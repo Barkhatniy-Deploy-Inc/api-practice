@@ -1,2 +1,32 @@
-/.obsidian
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+
+# Environment
+.env
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+.obsidian/
+
+# Project specific
 /conductor
+
+.env
+*.db
+logs/
+__pycache__/
+.pytest_cache/
