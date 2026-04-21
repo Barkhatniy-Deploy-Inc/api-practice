@@ -17,7 +17,6 @@ logging.basicConfig(
 DB_PATH = 'DTP_DB.db'
 API_URL = 'http://stat.gibdd.ru/opendataapi/v1/kartdtp/rows'
 
-# Словарь соответствия: Код региона ГИБДД -> ID федерального округа
 REGION_TO_DISTRICT = {
     "1145": 1, "1117": 1, "1115": 1, "1120": 1, "1124": 1, "1129": 1, "1134": 1, "1142": 1, "1146": 1, "1154": 1, "1161": 1, "1166": 1, "1170": 1, "1178": 1, "1180": 1, "1114": 1,
     "1140": 2, "1111": 2, "1118": 2, "1119": 2, "1127": 2, "1133": 2, "1141": 2, "1147": 2, "1153": 2, "1110": 2,
@@ -44,6 +43,21 @@ def create_robust_session():
     session.mount('http://', adapter)
     session.mount('https://', adapter)
     return session
+
+def heal_districts(conn):
+    """Функция самолечения: заполняет пустую таблицу округов, чтобы не падали внешние ключи"""
+    cursor = conn.cursor()
+    districts_data = [
+        (1, 'CFO', 'Центральный федеральный округ'), (2, 'SZFO', 'Северо-Западный федеральный округ'),
+        (3, 'UFO', 'Южный федеральный округ'), (4, 'SKFO', 'Северо-Кавказский федеральный округ'),
+        (5, 'PFO', 'Приволжский федеральный округ'), (6, 'URFO', 'Уральский федеральный округ'),
+        (7, 'SFO', 'Сибирский федеральный округ'), (8, 'DFO', 'Дальневосточный федеральный округ')
+    ]
+    try:
+        cursor.executemany("INSERT OR IGNORE INTO districts (id, code, name) VALUES (?, ?, ?)", districts_data)
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
 
 def get_or_create_dict(cursor, table_name, value):
     if not value: return 0
@@ -91,9 +105,9 @@ def fetch_and_save(session, conn, region, year, month):
                 dist_id = REGION_TO_DISTRICT.get(reg_code_api)
                 
                 cursor.execute('''
-                    INSERT OR REPLACE INTO regions (code, name, district_id, population, vehicles)
-                    VALUES (?, ?, ?, COALESCE((SELECT population FROM regions WHERE code=?), 0), COALESCE((SELECT vehicles FROM regions WHERE code=?), 0))
-                ''', (reg_code_api, reg_name_api, dist_id, reg_code_api, reg_code_api))
+                    INSERT OR IGNORE INTO regions (code, name, district_id)
+                    VALUES (?, ?, ?)
+                ''', (reg_code_api, reg_name_api, dist_id))
 
                 pok_list = region_list[0].get('pok_list', [])
                 if pok_list:
@@ -201,7 +215,6 @@ def fetch_and_save(session, conn, region, year, month):
                         else:
                             gender = 'Не указан'
                         
-                        # --- АБСОЛЮТНО КОРРЕКТНОЕ ИЗВЛЕЧЕНИЕ (ЗАПИСЬ NULL при отсутствии) ---
                         raw_age = str(uch.get('v_r') or uch.get('V_R') or '')
                         age_digits = ''.join(filter(str.isdigit, raw_age))
                         age = int(age_digits) if age_digits else None
@@ -209,7 +222,6 @@ def fetch_and_save(session, conn, region, year, month):
                         raw_exp = str(uch.get('v_st') or uch.get('V_ST') or '')
                         exp_digits = ''.join(filter(str.isdigit, raw_exp))
                         experience = int(exp_digits) if exp_digits else None
-                        # --------------------------------------------------------------------
                         
                         cursor.execute('''
                             INSERT INTO participants (
@@ -239,14 +251,19 @@ def fetch_and_save(session, conn, region, year, month):
 
 def main():
     if not os.path.exists(DB_PATH):
-        logging.error(f"Файл базы данных '{DB_PATH}' не найден! Сначала запустите setup_db.py.")
+        logging.error(f"Файл базы данных '{DB_PATH}' не найден! Выполните setup_db.py.")
         return
 
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA foreign_keys = ON;")
+    
+    # --- МАГИЯ САМОЛЕЧЕНИЯ ---
+    heal_districts(conn)
+    # -------------------------
+
     session = create_robust_session()
     
-    logging.info("🚀 Синхронизация запущена (Версия с NULLABLE-полями)...")
+    logging.info("🚀 Синхронизация запущена (Версия с авто-лечением базы)...")
     
     try:
         for year in YEARS_TO_PARSE:
