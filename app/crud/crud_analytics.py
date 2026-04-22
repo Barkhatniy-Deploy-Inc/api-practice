@@ -1,6 +1,6 @@
 from typing import List, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, extract
 from app.models.dtp import Accident, Participant
 from app.models.dictionaries import Region, WeatherType
 
@@ -8,7 +8,8 @@ class CRUDAnalytics:
     async def get_monthly_stats(self, db: AsyncSession, region_code: Optional[str] = None) -> List[Any]:
         """Получить статистику по месяцам (ГГГГ-ММ, count, fatalities, injured)"""
         stmt = select(
-            func.strftime('%Y-%m', Accident.date_dtp).label('month'),
+            extract('year', Accident.date_dtp).label('year'),
+            extract('month', Accident.date_dtp).label('month'),
             func.count(Accident.id).label('count'),
             func.sum(Accident.fatalities).label('fatalities'),
             func.sum(Accident.injured).label('injured')
@@ -16,14 +17,26 @@ class CRUDAnalytics:
         if region_code:
             stmt = stmt.where(Accident.region_code == region_code)
         
-        stmt = stmt.group_by('month').order_by(desc('month'))
+        stmt = stmt.group_by('year', 'month').order_by(desc('year'), desc('month'))
         result = await db.execute(stmt)
-        return result.all()
+        rows = result.all()
+        
+        # Формируем результат в виде объектов с полем period для совместимости со схемами
+        return [
+            type('StatRow', (), {
+                'period': f"{int(r.year)}-{int(r.month):02d}",
+                'month': f"{int(r.year)}-{int(r.month):02d}", # Для совместимости с логикой прогноза
+                'count': r.count,
+                'fatalities': r.fatalities,
+                'injured': r.injured
+            })()
+            for r in rows
+        ]
 
     async def get_yearly_stats(self, db: AsyncSession, region_code: Optional[str] = None) -> List[Any]:
         """Получить статистику по годам (ГГГГ, count, fatalities, injured)"""
         stmt = select(
-            func.strftime('%Y', Accident.date_dtp).label('year'),
+            extract('year', Accident.date_dtp).label('year'),
             func.count(Accident.id).label('count'),
             func.sum(Accident.fatalities).label('fatalities'),
             func.sum(Accident.injured).label('injured')
@@ -33,7 +46,18 @@ class CRUDAnalytics:
         
         stmt = stmt.group_by('year').order_by(desc('year'))
         result = await db.execute(stmt)
-        return result.all()
+        rows = result.all()
+        
+        return [
+            type('StatRow', (), {
+                'period': str(int(r.year)),
+                'year': str(int(r.year)), # Для обратной совместимости
+                'count': r.count,
+                'fatalities': r.fatalities,
+                'injured': r.injured
+            })()
+            for r in rows
+        ]
 
     async def get_region_risk_data(self, db: AsyncSession, region_code: str) -> Any:
         """Получить данные для расчета рисков региона (fatalities, population, vehicles)"""

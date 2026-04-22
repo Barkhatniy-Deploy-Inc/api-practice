@@ -61,9 +61,15 @@ class AnalyticsService:
         # Прогноз на следующий шаг (x = n)
         prediction = a * n + b
         
-        # Доверительный интервал (упрощенно: стандартное отклонение остатков)
-        residuals = [(yi - (a * xi + b))**2 for xi, yi in zip(x, y)]
-        std_dev = math.sqrt(sum(residuals) / n)
+        # Доверительный интервал (несмещенная оценка стандартного отклонения остатков)
+        # Используем n - 2 степени свободы для парной линейной регрессии
+        residuals_sum = sum((yi - (a * xi + b))**2 for xi, yi in zip(x, y))
+        
+        if n > 2:
+            std_dev = math.sqrt(residuals_sum / (n - 2))
+        else:
+            # Если данных слишком мало для несмещенной оценки, используем смещенную
+            std_dev = math.sqrt(residuals_sum / n) if n > 0 else 0.0
         
         return max(0.0, prediction), std_dev
 

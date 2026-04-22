@@ -138,4 +138,5 @@ async def root():
     return {"message": "Welcome to DTP Analytics API. Visit /docs for documentation."}
 
 from app.api.v1.api import api_router
-app.include_router(api_router, prefix=settings.API_V1_STR)
+from fastapi import Depends
+app.include_router(api_router, prefix=settings.API_V1_STR, dependencies=[Depends(verify_api_key)])

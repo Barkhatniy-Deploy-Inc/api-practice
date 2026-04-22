@@ -2,44 +2,41 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Date, Time, Float, B
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 
+# Импортируем классы для отношений, чтобы SQLAlchemy их видела
+from app.models.dictionaries import Region, District, WeatherType, RoadCondition, AccidentType, CarType, CarBrand, CarModel
+
 class Accident(Base):
     """Центральный реестр ДТП"""
     __tablename__ = "accidents"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    empt_number = Column(String, nullable=False, unique=True)  # Системный номер ГИБДД
-
+    empt_number = Column(String, nullable=False, unique=True)
     accident_type_id = Column(Integer, ForeignKey("accident_types.id"))
-    date_dtp = Column(Date, nullable=False)  # ГГГГ-ММ-ДД
-    time_dtp = Column(Time, nullable=False)  # ЧЧ:ММ
-
+    date_dtp = Column(Date, nullable=False)
+    time_dtp = Column(Time, nullable=False)
     region_code = Column(String, ForeignKey("regions.code"), nullable=False)
-    coord_lat = Column(Float)  # Широта
-    coord_lon = Column(Float)  # Долгота
-    locality = Column(String)  # Населённый пункт
-    road_name = Column(String) # Название дороги
-    road_km = Column(Integer)  # Километр дороги
-    is_city = Column(Boolean, default=True) # 1=в городе, 0=трасса
-    road_category = Column(String) # "Федеральная", "Региональная", "Местная"
-    is_railway = Column(Boolean, default=False) # ДТП на ж/д переезде
-
+    coord_lat = Column(Float)
+    coord_lon = Column(Float)
+    locality = Column(String)
+    road_name = Column(String)
+    road_km = Column(Integer)
+    is_city = Column(Boolean, default=True)
+    road_category = Column(String)
+    is_railway = Column(Boolean, default=False)
     weather_id = Column(Integer, ForeignKey("weather_types.id"))
     road_cond_id = Column(Integer, ForeignKey("road_conditions.id"))
-    lighting = Column(String) # Освещение
-    has_road_defect = Column(Integer, default=0) # Дефект дороги
-    road_type = Column(String) # Тип дороги
-    road_defect_desc = Column(String) # Описание дефекта
-
-    fatalities = Column(Integer, nullable=False, default=0) # Кол-во погибших
-    injured = Column(Integer, nullable=False, default=0)    # Кол-во раненых
-    vehicles_count = Column(Integer, nullable=False, default=1) # Кол-во ТС
-    participants_count = Column(Integer, nullable=False, default=1) # Кол-во участников
-
-    driver_fled = Column(Boolean, default=False) # Водитель скрылся
-    has_children = Column(Boolean, default=False) # Есть несовершеннолетние
-    has_drunk = Column(Boolean, default=False) # Есть нетрезвые
-
-    rescue_time_min = Column(Integer) # Время прибытия спецслужб
+    lighting = Column(String)
+    has_road_defect = Column(Boolean, default=False)
+    road_type = Column(String)
+    road_defect_desc = Column(String)
+    fatalities = Column(Integer, nullable=False, default=0)
+    injured = Column(Integer, nullable=False, default=0)
+    vehicles_count = Column(Integer, nullable=False, default=1)
+    participants_count = Column(Integer, nullable=False, default=1)
+    driver_fled = Column(Boolean, default=False)
+    has_children = Column(Boolean, default=False)
+    has_drunk = Column(Boolean, default=False)
+    rescue_time_min = Column(Integer)
     created_at = Column(DateTime, server_default=func.now())
 
     # Relationships
@@ -55,15 +52,17 @@ class Vehicle(Base):
     __tablename__ = "vehicles"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    accident_id = Column(Integer, ForeignKey("accidents.id"), nullable=False)
+    accident_id = Column(Integer, ForeignKey("accidents.id", ondelete="CASCADE"), nullable=False)
     car_type_id = Column(Integer, ForeignKey("car_types.id"))
+    car_brand_id = Column(Integer, ForeignKey("car_brands.id"))
     car_model_id = Column(Integer, ForeignKey("car_models.id"))
-    year_release = Column(Integer) # Год выпуска ТС
-    is_defective = Column(Integer, nullable=False, default=0) # Техническая неисправность
+    year_release = Column(Integer)
+    is_defective = Column(Boolean, default=False)
 
     # Relationships
     accident = relationship("Accident", back_populates="vehicles")
     car_type = relationship("CarType", back_populates="vehicles")
+    car_brand = relationship("CarBrand", back_populates="vehicles")
     car_model = relationship("CarModel", back_populates="vehicles")
     participants = relationship("Participant", back_populates="vehicle")
 
@@ -73,21 +72,17 @@ class Participant(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     accident_id = Column(Integer, ForeignKey("accidents.id", ondelete="CASCADE"), nullable=False)
-    vehicle_id = Column(Integer, ForeignKey("vehicles.id")) # NULL для пешеходов
-
-    role = Column(String, nullable=False) # "Водитель", "Пешеход" ...
-    is_culprit = Column(Integer, nullable=False, default=0) # Виновник ДТП
-
-    gender = Column(Boolean) # 1=мужской, 0=женский
-    age = Column(Integer) # Возраст
-    experience = Column(Integer) # Стаж вождения
-
-    is_drunk = Column(String) # Алкогольное опьянение
-    is_intoxication = Column(String) # Наркотическое опьянение
-    alcohol_level = Column(Float) # Промилле
-    before_health = Column(String) # Состояние до аварии
-    health_status = Column(String) # "Погиб", "Тяжкий вред" ...
-    first_aid = Column(Integer, nullable=False, default=0) # Оказана первая помощь
+    vehicle_id = Column(Integer, ForeignKey("vehicles.id", ondelete="CASCADE"))
+    role = Column(String, nullable=False)
+    is_culprit = Column(Boolean, default=False)
+    gender = Column(String)
+    age = Column(Integer)
+    experience = Column(Integer)
+    is_drunk = Column(Boolean, default=False)
+    is_intoxication = Column(Boolean, default=False)
+    alcohol_level = Column(Float)
+    health_status = Column(String)
+    first_aid = Column(Boolean, default=False)
 
     # Relationships
     accident = relationship("Accident", back_populates="participants")

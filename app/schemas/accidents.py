@@ -1,4 +1,4 @@
-from datetime import date, time
+import datetime
 from typing import List, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -6,12 +6,12 @@ class ParticipantSchema(BaseModel):
     """Схема участника ДТП"""
     id: int
     role: str
-    gender: Optional[bool] = None
+    gender: Optional[str] = None
     age: Optional[int] = None
     health_status: Optional[str] = None
     experience: Optional[int] = None
-    is_drunk: Optional[str] = None
-    is_culprit: int
+    is_drunk: bool = False
+    is_culprit: bool = False
     model_config = ConfigDict(from_attributes=True)
 
 class VehicleSchema(BaseModel):
@@ -21,7 +21,7 @@ class VehicleSchema(BaseModel):
     brand: Optional[str] = Field(None, alias="car_brand")
     model: Optional[str] = Field(None, alias="car_model_name")
     year: Optional[int] = Field(None, alias="year_release")
-    is_defective: bool
+    is_defective: bool = False
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 class MainInfoSchema(BaseModel):
@@ -38,12 +38,12 @@ class AccidentShortSchema(BaseModel):
     """Краткая карточка ДТП для списков"""
     id: int
     empt_number: str
-    date: date = Field(..., alias="date_dtp")
-    time: time = Field(..., alias="time_dtp")
+    date_dtp: datetime.date = Field(..., alias="date")
+    time_dtp: datetime.time = Field(..., alias="time")
     region_code: str
     fatalities: int
     injured: int
-    address: Optional[str] = Field(None, alias="road_name") # Или locality + road_name
+    address: Optional[str] = Field(None, alias="road_name")
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 class AccidentDetailSchema(BaseModel):

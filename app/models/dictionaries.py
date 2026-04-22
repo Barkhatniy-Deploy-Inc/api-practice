@@ -7,8 +7,8 @@ class District(Base):
     __tablename__ = "districts"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    code = Column(String, nullable=False, unique=True)  # "ЦФО", "ПФО" ...
-    name = Column(String, nullable=False, unique=True)  # "Центральный федеральный округ"
+    code = Column(String, nullable=False, unique=True)
+    name = Column(String, nullable=False, unique=True)
 
     regions = relationship("Region", back_populates="district")
 
@@ -16,11 +16,11 @@ class Region(Base):
     """Субъекты РФ"""
     __tablename__ = "regions"
 
-    code = Column(String, primary_key=True)  # "77", "50" ...
-    name = Column(String, nullable=False)    # "гор. Москва"
+    code = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
     district_id = Column(Integer, ForeignKey("districts.id"), nullable=False)
-    population = Column(Integer)             # Численность населения
-    vehicles = Column(Integer)               # Кол-во зарегистрированных ТС
+    population = Column(Integer)
+    vehicles = Column(Integer)
 
     district = relationship("District", back_populates="regions")
     accidents = relationship("Accident", back_populates="region")
@@ -30,7 +30,7 @@ class WeatherType(Base):
     __tablename__ = "weather_types"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, nullable=False, unique=True)  # "Ясно", "Дождь" ...
+    name = Column(String, nullable=False, unique=True)
 
     accidents = relationship("Accident", back_populates="weather")
 
@@ -39,7 +39,7 @@ class RoadCondition(Base):
     __tablename__ = "road_conditions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, nullable=False, unique=True)  # "Сухое", "Мокрое" ...
+    name = Column(String, nullable=False, unique=True)
 
     accidents = relationship("Accident", back_populates="road_condition")
 
@@ -48,7 +48,7 @@ class AccidentType(Base):
     __tablename__ = "accident_types"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, nullable=False, unique=True)  # "Наезд на пешехода", "Столкновение" ...
+    name = Column(String, nullable=False, unique=True)
 
     accidents = relationship("Accident", back_populates="accident_type")
 
@@ -57,16 +57,25 @@ class CarType(Base):
     __tablename__ = "car_types"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, nullable=False, unique=True)  # "Легковой", "Грузовой" ...
+    name = Column(String, nullable=False, unique=True)
 
     vehicles = relationship("Vehicle", back_populates="car_type")
+
+class CarBrand(Base):
+    """Марки автомобилей"""
+    __tablename__ = "car_brands"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False, unique=True)
+
+    vehicles = relationship("Vehicle", back_populates="car_brand")
 
 class CarModel(Base):
     """Модели автомобилей"""
     __tablename__ = "car_models"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, nullable=False)   # "Logan"
-    brand = Column(String, nullable=False)  # "Renault"
+    name = Column(String, nullable=False)
+    brand_id = Column(Integer, ForeignKey("car_brands.id"), nullable=False)
 
     vehicles = relationship("Vehicle", back_populates="car_model")

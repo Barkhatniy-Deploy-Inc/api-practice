@@ -14,7 +14,7 @@ logging.basicConfig(
     datefmt='%H:%M:%S'
 )
 
-DB_PATH = 'DTP_DB.db'
+DB_PATH = 'dtp.db'
 API_URL = 'http://stat.gibdd.ru/opendataapi/v1/kartdtp/rows'
 
 # Словарь соответствия: Код региона ГИБДД -> ID федерального округа
@@ -45,22 +45,52 @@ def create_robust_session():
     session.mount('https://', adapter)
     return session
 
+def smart_sleep():
+    """Имитация естественного поведения пользователя для защиты от блокировок."""
+    # Базовая задержка
+    delay = random.uniform(0.4, 0.9)
+    
+    # Редкие "длинные" паузы (имитация чтения или перехода между страницами)
+    rand = random.random()
+    if rand < 0.05:
+        logging.info("⏳ Имитация паузы для изучения данных...")
+        delay += random.uniform(2.0, 5.0)
+    elif rand < 0.01:
+        logging.info("☕ Делаем небольшой перерыв (защита от бана)...")
+        delay += random.uniform(10.0, 20.0)
+    
+    time.sleep(delay)
+
 def get_or_create_dict(cursor, table_name, value):
     if not value: return 0
     clean_value = value[0] if isinstance(value, list) and value else str(value)
-    cursor.execute(f'SELECT id FROM {table_name} WHERE name = ?', (clean_value,))
-    row = cursor.fetchone()
-    if row: return row[0]
-    cursor.execute(f'INSERT INTO {table_name} (name) VALUES (?)', (clean_value,))
-    return cursor.lastrowid
+    
+    # Используем атомарный INSERT с RETURNING для оптимизации (требует UNIQUE на поле name)
+    try:
+        cursor.execute(f'''
+            INSERT INTO {table_name} (name) VALUES (?) 
+            ON CONFLICT(name) DO UPDATE SET name=excluded.name 
+            RETURNING id
+        ''', (clean_value,))
+        return cursor.fetchone()[0]
+    except sqlite3.Error as e:
+        logging.error(f"Ошибка словаря {table_name} для '{clean_value}': {e}")
+        return 0
 
 def get_or_create_car_model(cursor, model_name, brand_id):
     if not model_name: return 0
-    cursor.execute('SELECT id FROM car_models WHERE name = ?', (model_name,))
-    row = cursor.fetchone()
-    if row: return row[0]
-    cursor.execute('INSERT INTO car_models (name, brand) VALUES (?, ?)', (model_name, brand_id))
-    return cursor.lastrowid
+    
+    # Используем атомарный INSERT с RETURNING (требует UNIQUE индекс на name, brand)
+    try:
+        cursor.execute('''
+            INSERT INTO car_models (name, brand) VALUES (?, ?)
+            ON CONFLICT(name, brand) DO UPDATE SET name=excluded.name
+            RETURNING id
+        ''', (model_name, brand_id))
+        return cursor.fetchone()[0]
+    except sqlite3.Error as e:
+        logging.error(f"Ошибка при работе с моделью '{model_name}': {e}")
+        return 0
 
 def fetch_and_save(session, conn, region, year, month):
     cursor = conn.cursor()
@@ -124,7 +154,7 @@ def fetch_and_save(session, conn, region, year, month):
                 road_type = card.get('k_dor') or card.get('dor_k') or 'Не указано'
                 
                 ndu_list = card.get('ndu', [])
-                has_road_defect = 1 if ndu_list else 0
+                has_road_defect = True if ndu_list else False
                 road_defect_desc = ", ".join(ndu_list) if ndu_list else ""
 
                 pog_data = card.get('s_pog')
@@ -136,22 +166,23 @@ def fetch_and_save(session, conn, region, year, month):
                 road_cond_id = get_or_create_dict(cursor, 'road_conditions', road_cond_name)
 
                 f_skr = str(card.get('f_skr', '')).lower()
-                driver_fled = 1 if 'да' in f_skr or f_skr == '1' else 0
+                driver_fled = True if 'да' in f_skr or f_skr == '1' else False
 
                 child_pog = int(card.get('k_d_pog', 0)) if str(card.get('k_d_pog')).isdigit() else 0
                 child_ran = int(card.get('k_d_ran', 0)) if str(card.get('k_d_ran')).isdigit() else 0
-                has_children = 1 if (child_pog + child_ran) > 0 else 0
+                has_children = True if (child_pog + child_ran) > 0 else False
 
                 np_alc = str(card.get('np_alc', '')).lower()
-                has_drunk = 1 if 'да' in np_alc or card.get('f_alc') == '1' else 0
+                has_drunk = True if 'да' in np_alc or card.get('f_alc') == '1' else False
                 
-                is_railway = 1 if 'жд' in str(card.get('f_zhd', '')).lower() else 0
+                is_railway = True if 'жд' in str(card.get('f_zhd', '')).lower() else False
 
                 accident_type_id = get_or_create_dict(cursor, 'accident_types', card.get('dtpv') or 'Не указано')
 
                 try:
+                    # Оптимизированная вставка с получением ID за один проход
                     cursor.execute('''
-                        INSERT OR IGNORE INTO accidents (
+                        INSERT INTO accidents (
                             empt_number, accident_type_id, date_dtp, time_dtp,
                             region_code, coord_lat, coord_lon, locality, road_name, road_km,
                             is_city, road_category, weather_id, road_cond_id,
@@ -159,6 +190,8 @@ def fetch_and_save(session, conn, region, year, month):
                             fatalities, injured, vehicles_count, participants_count, 
                             has_children, driver_fled, has_drunk, is_railway
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(empt_number) DO UPDATE SET id=id
+                        RETURNING id
                     ''', (
                         empt_number, accident_type_id, date_dtp, card.get('time', '00:00'),
                         region, float(card.get('coord_w') or 0), float(card.get('coord_l') or 0),
@@ -170,13 +203,10 @@ def fetch_and_save(session, conn, region, year, month):
                         has_children, driver_fled, has_drunk, is_railway
                     ))
                     
-                    cursor.execute('SELECT id FROM accidents WHERE empt_number = ?', (empt_number,))
-                    acc_row = cursor.fetchone()
-                    if not acc_row: continue
-                    accident_id = acc_row[0]
+                    accident_id = cursor.fetchone()[0]
                     
                 except sqlite3.Error as e:
-                    logging.error(f"Ошибка БД (ДТП {empt_number}): {e}")
+                    logging.error(f"🛑 Ошибка БД при сохранении ДТП {empt_number}: {e}")
                     continue
 
                 ts_info = card.get('ts_info', [])
@@ -186,10 +216,11 @@ def fetch_and_save(session, conn, region, year, month):
                     c_type_id = get_or_create_dict(cursor, 'car_types', ts.get('t_ts') or 'Не указан')
 
                     cursor.execute('''
-                        INSERT INTO vehicles (accident_id, car_type_id, car_brand_id, car_model_id, year_release)
-                        VALUES (?, ?, ?, ?, ?)
-                    ''', (accident_id, c_type_id, c_brand_id, c_model_id, int(ts.get('g_v') or 0)))
-                    vehicle_id = cursor.lastrowid
+                        INSERT INTO vehicles (accident_id, car_type_id, car_brand_id, car_model_id, year_release, is_defective)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        RETURNING id
+                    ''', (accident_id, c_type_id, c_brand_id, c_model_id, int(ts.get('g_v') or 0), True if ts.get('f_tech') == '1' else False))
+                    vehicle_id = cursor.fetchone()[0]
 
                     ts_uch = ts.get('ts_uch', [])
                     for uch in ts_uch:
@@ -219,9 +250,9 @@ def fetch_and_save(session, conn, region, year, month):
                         ''', (
                             accident_id, vehicle_id, uch.get('kt_uch', 'Неизвестно'), 
                             gender, age, experience, 
-                            1 if 'опьянени' in str(uch.get('alco', '')).lower() else 0,
-                            1 if uch.get('NPDD') else 0, uch.get('S_P', 'Не указано'),
-                            1 if uch.get('MED_P') else 0
+                            True if 'опьянени' in str(uch.get('alco', '')).lower() else False,
+                            True if uch.get('NPDD') else False, uch.get('S_P', 'Не указано'),
+                            True if uch.get('MED_P') else False
                         ))
 
             conn.commit()
@@ -258,4 +289,5 @@ def main():
         conn.close()
 
 if __name__ == "__main__":
+    main()
     main()

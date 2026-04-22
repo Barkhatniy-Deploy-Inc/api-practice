@@ -1,8 +1,10 @@
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 class TrendPoint(BaseModel):
     """Точка тренда"""
+    model_config = ConfigDict(from_attributes=True)
+
     period: str = Field(..., description="Период (ГГГГ-ММ или ГГГГ)")
     count: int = Field(..., description="Количество ДТП")
     fatalities: int = Field(..., description="Количество погибших")
