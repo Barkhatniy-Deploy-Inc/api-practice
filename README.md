@@ -24,7 +24,7 @@ docker compose up --build
 
 - `pull_request` в `main` или `master`: запускается только `test` job.
 - `push` в `main`: после успешных тестов запускается `deploy` job на self-hosted runner с labels `self-hosted`, `linux`, `x64`, `yandex-vds`, `production`.
-- Деплой использует `docker compose -p zebrastat up -d --build --remove-orphans`, затем выполняет `scripts/init_db.py`, `scripts/seed_db.py` внутри контейнера и проверяет `http://127.0.0.1:8000/health`.
+- Деплой использует `docker compose -p zebrastat up -d --build --remove-orphans`, затем выполняет `python -m scripts.init_db` внутри контейнера и проверяет `http://127.0.0.1:8000/health`.
 
 Для GitHub нужно создать environment `production` и заполнить secrets:
 
@@ -56,20 +56,20 @@ curl http://213.165.196.208:8000/health
 В проекте нет Alembic-миграций. Таблицы создаются скриптом:
 
 ```bash
-docker compose run --rm api python scripts/init_db.py
+docker compose run --rm api python -m scripts.init_db
 ```
 
 Справочники регионов и округов загружаются отдельным шагом:
 
 ```bash
-docker compose run --rm api python scripts/seed_db.py
+docker compose run --rm api python -m scripts.seed_db
 ```
 
 Для локального запуска без Docker используйте тот же скрипт после установки зависимостей:
 
 ```bash
-python scripts/init_db.py
-python scripts/seed_db.py
+python -m scripts.init_db
+python -m scripts.seed_db
 ```
 
 ## Healthcheck

@@ -1,9 +1,15 @@
 import json
 import os
 import sqlite3
+import sys
 from pathlib import Path
 
-from region_catalog import DISTRICTS, REGION_TO_DISTRICT
+project_root = str(Path(__file__).resolve().parents[1])
+if project_root not in sys.path:
+    # Позволяет запускать скрипт как `python scripts/seed_db.py` и как `python -m scripts.seed_db`.
+    sys.path.insert(0, project_root)
+
+from scripts.region_catalog import DISTRICTS, REGION_TO_DISTRICT
 
 
 def resolve_db_path() -> Path:
