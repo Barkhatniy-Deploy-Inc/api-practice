@@ -1,4 +1,4 @@
-from typing import List, Optional, Any
+from typing import Any, Dict, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, extract
 from app.models.dtp import Accident, Participant
