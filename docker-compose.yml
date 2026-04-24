@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: zebrastat_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./dtp.db:/app/dtp.db
+      - ./logs:/app/logs
+    environment:
+      - X_API_KEY=${X_API_KEY}
+      - DEBUG_MODE=false
+    restart: always
+
+volumes:
+  logs:
