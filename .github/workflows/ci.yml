@@ -95,27 +95,45 @@ jobs:
         run: |
           docker compose -p zebrastat up -d --build --remove-orphans
 
-      - name: Wait for api container
+      - name: Wait for API health endpoint
         run: |
-          for attempt in 1 2 3 4 5 6; do
-            if docker compose -p zebrastat exec -T api true; then
+          for attempt in $(seq 1 20); do
+            if docker compose -p zebrastat exec -T api python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()" >/dev/null 2>&1; then
               exit 0
             fi
 
-            echo "Waiting for api container to be ready (${attempt}/6)..."
-            sleep 5
+            echo "Waiting for API health endpoint (${attempt}/20)..."
+            sleep 3
           done
 
-          echo "API container did not become ready in time."
+          echo "API health endpoint did not become ready in time."
+          docker compose -p zebrastat ps
+          docker compose -p zebrastat logs --tail 200 api
           exit 1
 
       - name: Initialize database
         run: |
-          docker compose -p zebrastat exec -T api python scripts/init_db.py
+          docker compose -p zebrastat exec -T api python -m scripts.init_db
+
+      - name: Wait for API health after database init
+        run: |
+          for attempt in $(seq 1 20); do
+            if docker compose -p zebrastat exec -T api python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()" >/dev/null 2>&1; then
+              exit 0
+            fi
+
+            echo "Waiting for API health after init (${attempt}/20)..."
+            sleep 3
+          done
+
+          echo "API health endpoint did not recover after database initialization."
+          docker compose -p zebrastat ps
+          docker compose -p zebrastat logs --tail 200 api
+          exit 1
 
       - name: Verify deployment health
         run: |
-          curl --fail --silent --show-error --retry 10 --retry-delay 5 --retry-connrefused http://127.0.0.1:8000/health
+          curl --fail --silent --show-error --retry 20 --retry-delay 3 --retry-connrefused --retry-all-errors http://127.0.0.1:8000/health
 
       - name: Show compose status on failure
         if: failure()
