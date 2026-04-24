@@ -7,7 +7,9 @@ from app.services.analytics import analytics_service
 from app.schemas.analytics import (
     MonthlyTrendResponse, YearlyTrendResponse, TrendPoint,
     PredictionResponse, RiskResponse, CorrelationResponse, CorrelationItem,
-    SummaryStatsResponse, SeasonalityResponse, SeasonalityItem,
+    SummaryStatsResponse, RegionStatsResponse, RegionStatsItem,
+    TimelineStatsResponse, TimelineStatsItem,
+    SeasonalityResponse, SeasonalityItem,
     DangerZonesResponse, DangerZoneItem,
     SafeRegionsResponse, SafeRegionItem,
     ParticipantProfileResponse,
@@ -76,11 +78,60 @@ async def get_seasonality(db: AsyncSession = Depends(get_db)):
     """Выявление влияния времен года на безопасность"""
     stats = await crud_analytics.get_monthly_stats(db)
     if not stats:
-        raise HTTPException(status_code=404, detail="Нет данных для анализа")
+        raise HTTPException(status_code=404, detail="Нет данных для анализа сезонности")
     
     processed_stats = [type('SeasonStat', (), {'month': s.month.split('-')[1], 'count': s.count})() for s in stats]
     items = analytics_service.calculate_seasonality(processed_stats)
     return SeasonalityResponse(items=[SeasonalityItem(**item) for item in items])
+
+@router.get("/summary", response_model=SummaryStatsResponse, summary="Сводная статистика")
+async def get_summary(db: AsyncSession = Depends(get_db)):
+    """Базовая сводка по количеству ДТП, погибших и раненых."""
+    stats = await crud_analytics.get_summary_stats(db)
+    return SummaryStatsResponse(
+        total_accidents=stats.total_accidents or 0,
+        total_fatalities=stats.total_fatalities or 0,
+        total_injured=stats.total_injured or 0,
+    )
+
+@router.get("/regions", response_model=RegionStatsResponse, summary="Статистика по регионам")
+async def get_regions_stats(
+    sort_by: str = Query("accidents", pattern="^(accidents|fatalities)$"),
+    order: str = Query("desc", pattern="^(asc|desc)$"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Статистика аварийности по регионам."""
+    stats = await crud_analytics.get_regional_stats(db, sort_by=sort_by, order=order)
+    return RegionStatsResponse(
+        items=[
+            RegionStatsItem(
+                name=s.name,
+                code=s.code,
+                accidents=s.accidents or 0,
+                fatalities=s.fatalities or 0,
+            )
+            for s in stats
+        ]
+    )
+
+@router.get("/timeline", response_model=TimelineStatsResponse, summary="Временная шкала статистики")
+async def get_timeline(
+    interval: str = Query("month", pattern="^(day|month|year)$"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Динамика ДТП по дням, месяцам или годам."""
+    stats = await crud_analytics.get_timeline_stats(db, interval=interval)
+    return TimelineStatsResponse(
+        items=[
+            TimelineStatsItem(
+                period=s.period,
+                accidents=s.accidents or 0,
+                fatalities=s.fatalities or 0,
+                injured=s.injured or 0,
+            )
+            for s in stats
+        ]
+    )
 
 # --- ГРУППА 3: Сравнения и Рейтинги ---
 

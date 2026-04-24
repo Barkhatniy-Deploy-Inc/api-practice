@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field, ConfigDict
 
 class TrendPoint(BaseModel):
@@ -154,4 +154,3 @@ class RegionalDashboardResponse(BaseModel):
     risks: RiskResponse
     seasonality: List[SeasonalityItem]
     top_danger_zones: List[DangerZoneItem]
-
