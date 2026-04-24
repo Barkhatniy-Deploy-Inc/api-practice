@@ -1,4 +1,4 @@
-name: Python CI
+name: CI
 
 on:
   push:
@@ -6,26 +6,117 @@ on:
   pull_request:
     branches: [ main, master ]
 
+permissions:
+  contents: read
+
 jobs:
   test:
+    name: Tests
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 15
+
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.10"
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-asyncio pytest-cov httpx aiosqlite
-        
-    - name: Run tests with coverage
-      env:
-        X_API_KEY: "test_key_for_ci_checks_only_must_be_long_enough"
-      run: |
-        pytest --cov=app tests/
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov httpx aiosqlite
+
+      - name: Run tests with coverage
+        env:
+          X_API_KEY: "test_key_for_ci_checks_only_must_be_long_enough"
+        run: |
+          pytest --cov=app tests/
+
+  deploy:
+    name: Deploy to Yandex Cloud VDS
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - yandex-vds
+      - production
+    timeout-minutes: 30
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: http://213.165.196.208:8000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate production secrets
+        env:
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+        run: |
+          if [ -z "$X_API_KEY" ]; then
+            echo "X_API_KEY secret is not set for the production environment."
+            exit 1
+          fi
+
+      - name: Create production env file
+        env:
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
+          DEBUG_MODE: ${{ secrets.DEBUG_MODE }}
+        run: |
+          umask 077
+          {
+            printf 'X_API_KEY=%s\n' "$X_API_KEY"
+            printf 'LOG_LEVEL=%s\n' "${LOG_LEVEL:-INFO}"
+            printf 'DEBUG_MODE=%s\n' "${DEBUG_MODE:-false}"
+          } > .env
+
+      - name: Show Docker versions
+        run: |
+          docker --version
+          docker compose version
+
+      - name: Build and restart application
+        run: |
+          docker compose -p zebrastat up -d --build --remove-orphans
+
+      - name: Wait for api container
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if docker compose -p zebrastat exec -T api true; then
+              exit 0
+            fi
+
+            echo "Waiting for api container to be ready (${attempt}/6)..."
+            sleep 5
+          done
+
+          echo "API container did not become ready in time."
+          exit 1
+
+      - name: Initialize database
+        run: |
+          docker compose -p zebrastat exec -T api python scripts/init_db.py
+
+      - name: Verify deployment health
+        run: |
+          curl --fail --silent --show-error --retry 10 --retry-delay 5 --retry-connrefused http://127.0.0.1:8000/health
+
+      - name: Show compose status on failure
+        if: failure()
+        run: |
+          docker compose -p zebrastat ps
+          docker compose -p zebrastat logs --tail 200
+
+      - name: Remove generated env file
+        if: always()
+        run: |
+          rm -f .env
