@@ -44,8 +44,6 @@ jobs:
       - self-hosted
       - linux
       - x64
-      - yandex-vds
-      - production
     timeout-minutes: 30
     concurrency:
       group: production-deploy
