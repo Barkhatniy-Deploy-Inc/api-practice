@@ -1,58 +1,73 @@
 import json
-import sqlite3
 import os
+import sqlite3
+from pathlib import Path
+
+from region_catalog import DISTRICTS, REGION_TO_DISTRICT
+
+
+def resolve_db_path() -> Path:
+    database_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./dtp.db")
+    prefixes = ("sqlite+aiosqlite:///", "sqlite:///")
+
+    for prefix in prefixes:
+        if database_url.startswith(prefix):
+            return Path(database_url[len(prefix):])
+
+    raise ValueError(f"Неподдерживаемый DATABASE_URL для seed_db.py: {database_url}")
+
 
 def seed():
-    print("🌱 Наполнение справочников из реального JSON...")
-    db_path = "dtp.db"
-    json_path = "regions_dict.json"
-    
-    if not os.path.exists(json_path):
-        print(f"❌ Файл {json_path} не найден.")
+    print("Наполнение справочников из regions_dict.json...")
+    db_path = resolve_db_path()
+    json_path = Path(__file__).with_name("regions_dict.json")
+
+    if not json_path.exists():
+        print(f"Файл {json_path} не найден.")
         return
 
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     try:
-        with open(json_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            
-        # 1. Заполняем округа (базовый набор)
-        districts = [
-            (1, "ЦФО", "Центральный федеральный округ"),
-            (2, "СЗФО", "Северо-Западный федеральный округ"),
-            (3, "ЮФО", "Южный федеральный округ"),
-            (4, "СКФО", "Северо-Кавказский федеральный округ"),
-            (5, "ПФО", "Приволжский федеральный округ"),
-            (6, "УФО", "Уральский федеральный округ"),
-            (7, "СФО", "Сибирский федеральный округ"),
-            (8, "ДФО", "Дальневосточный федеральный округ")
-        ]
-        cursor.executemany("INSERT OR IGNORE INTO districts (id, code, name) VALUES (?, ?, ?)", districts)
-        
-        # 2. Извлекаем регионы из сложной структуры JSON
-        # results[0] -> dict_rows
+        with json_path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+
+        cursor.executemany(
+            "INSERT OR IGNORE INTO districts (id, code, name) VALUES (?, ?, ?)",
+            DISTRICTS,
+        )
+
         rows = data.get("results", [{}])[0].get("dict_rows", [])
-        
         region_count = 0
+
         for row in rows:
-            code = row.get("rows_code")
-            name = row.get("rows_name")
-            if code and name:
-                # По умолчанию привязываем к 1 округу, если в JSON нет явной связи
-                cursor.execute("INSERT OR IGNORE INTO regions (code, name, district_id) VALUES (?, ?, ?)", (code, name, 1))
-                region_count += 1
-            
+            code = str(row.get("rows_code", "")).strip()
+            name = str(row.get("rows_name", "")).strip()
+            if not code or not name:
+                continue
+
+            district_id = REGION_TO_DISTRICT.get(code)
+            if not district_id:
+                print(f"Пропускаю регион без district mapping: {code} {name}")
+                continue
+
+            cursor.execute(
+                "INSERT OR IGNORE INTO regions (code, name, district_id) VALUES (?, ?, ?)",
+                (code, name, district_id),
+            )
+            region_count += 1
+
         conn.commit()
-        print(f"✅ Импортировано регионов: {region_count}")
-        print("✅ База данных полностью инициализирована.")
-    except Exception as e:
-        print(f"❌ Ошибка при импорте: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Импортировано или подтверждено регионов: {region_count}")
+        print(f"Использована база данных: {db_path}")
+    except Exception as exc:
+        print(f"Ошибка при импорте: {exc}")
+        raise
     finally:
         conn.close()
+
 
 if __name__ == "__main__":
     seed()

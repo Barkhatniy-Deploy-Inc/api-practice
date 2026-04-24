@@ -1,5 +1,8 @@
-import secrets
 import hashlib
+import hmac
+import secrets
+
+from app.core.config import settings
 
 def generate_new_key() -> str:
     """
@@ -10,9 +13,13 @@ def generate_new_key() -> str:
 
 def hash_key(key: str) -> str:
     """
-    Возвращает SHA-256 хеш ключа.
+    Возвращает HMAC-SHA256 хеш ключа с использованием AUTH_SALT.
     """
-    return hashlib.sha256(key.encode()).hexdigest()
+    return hmac.new(
+        settings.AUTH_SALT.get_secret_value().encode("utf-8"),
+        key.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
 def get_key_prefix(key: str) -> str:
     """
@@ -24,4 +31,4 @@ def validate_key(key: str, hashed_key: str) -> bool:
     """
     Сравнивает хеш присланного ключа с хешем из БД.
     """
-    return hash_key(key) == hashed_key
+    return secrets.compare_digest(hash_key(key), hashed_key)

@@ -1,9 +1,12 @@
+import hashlib
+import hmac
 import pytest
 import asyncio
 from fastapi.testclient import TestClient
 from app.main import app
 from app.core.config import settings
 from app.db.session import engine, Base
+from app.services import auth as auth_service
 
 client = TestClient(app)
 
@@ -61,3 +64,13 @@ def test_auth_invalid_master_key():
     )
     assert response.status_code == 403
     assert response.json()["detail"] == "Неверный Master-Key"
+
+def test_hash_key_uses_auth_salt():
+    expected_hash = hmac.new(
+        settings.AUTH_SALT.get_secret_value().encode("utf-8"),
+        b"student_key_for_hashing",
+        hashlib.sha256,
+    ).hexdigest()
+
+    assert auth_service.hash_key("student_key_for_hashing") == expected_hash
+    assert auth_service.validate_key("student_key_for_hashing", expected_hash)

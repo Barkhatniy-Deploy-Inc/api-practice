@@ -1,5 +1,4 @@
-from typing import List, Union
-from pydantic import AnyHttpUrl, field_validator, SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -10,6 +9,7 @@ class Settings(BaseSettings):
     
     # Security
     X_API_KEY: SecretStr
+    AUTH_SALT: SecretStr
     
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./dtp.db"
@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     def validate_api_key(cls, v: SecretStr) -> SecretStr:
         if len(v.get_secret_value()) < 32:
             raise ValueError("X_API_KEY должен быть не менее 32 символов для безопасности")
+        return v
+
+    @field_validator("AUTH_SALT", mode="after")
+    @classmethod
+    def validate_auth_salt(cls, v: SecretStr) -> SecretStr:
+        if len(v.get_secret_value()) < 16:
+            raise ValueError("AUTH_SALT должен быть не менее 16 символов для стабильного хеширования")
         return v
 
 settings = Settings()

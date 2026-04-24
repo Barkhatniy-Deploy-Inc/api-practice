@@ -1,3 +1,4 @@
+import secrets
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +17,7 @@ async def verify_master_key(x_master_key: str = Header(...)):
     Проверка Master-Key (X-MASTER-KEY).
     Сравнивается со значением settings.X_API_KEY.
     """
-    if x_master_key != settings.X_API_KEY.get_secret_value():
+    if not secrets.compare_digest(x_master_key, settings.X_API_KEY.get_secret_value()):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Неверный Master-Key"

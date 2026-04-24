@@ -9,9 +9,10 @@
 
 ## 1. Подготовка GitHub
 
-В репозитории создайте environment `production` и добавьте secrets:
+В репозитории создайте environment `production` и добавьте GitHub Environment Secrets:
 
 - `X_API_KEY` — обязательный production API key длиной не меньше 32 символов.
+- `AUTH_SALT` — обязательная стабильная секретная соль для хеширования API-ключей. Если изменить её позже, уже выданные ключи студентов перестанут совпадать с хешами в БД.
 - `LOG_LEVEL` — опционально, если не задан, workflow подставит `INFO`.
 - `DEBUG_MODE` — опционально, если не задан, workflow подставит `false`.
 
@@ -63,11 +64,13 @@ sudo mkdir -p /opt/actions-runner
 sudo chown actions:actions /opt/actions-runner
 ```
 
+Важно: пользователь `actions`, добавленный в группу `docker`, по сути получает высокий уровень доступа к хосту. Такой self-hosted runner нужно считать привилегированным и держать выделенным под один репозиторий и один deployment-сценарий.
+
 ## 3. Установка GitHub Actions runner
 
 Переключитесь на пользователя `actions`:
 
-
+```bash
 sudo su - actions
 cd /opt/actions-runner
 ```
@@ -92,6 +95,8 @@ sudo ./svc.sh start
 
 После этого убедитесь, что runner виден в GitHub как `Idle`.
 
+Сам runner и все job-ы будут исполняться от пользователя `actions`, а root нужен только для первичной настройки хоста и регистрации `systemd`-сервиса.
+
 ## 4. Базовая защита хоста
 
 Оставьте открытыми только SSH и HTTP-порт приложения:
@@ -110,10 +115,11 @@ Runner лучше держать выделенным только под это
 Workflow на self-hosted runner:
 
 1. Чекаутит код репозитория.
-2. Собирает `.env` из GitHub environment secrets.
+2. Собирает `.env` из GitHub Environment Secrets.
 3. Выполняет `docker compose -p zebrastat up -d --build --remove-orphans`.
 4. Выполняет `docker compose -p zebrastat exec -T api python scripts/init_db.py`.
-5. Проверяет `http://127.0.0.1:8000/health`.
+5. Выполняет `docker compose -p zebrastat exec -T api python scripts/seed_db.py`.
+6. Проверяет `http://127.0.0.1:8000/health`.
 
 Публичная проверка после деплоя:
 
