@@ -1,41 +1,49 @@
-# Этап 1: Сборка зависимостей
-FROM python:3.10-slim as builder
+FROM python:3.10-slim AS builder
 
-WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
-# Установка системных зависимостей для сборки некоторых библиотек
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
+WORKDIR /build
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Создание виртуального окружения
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt
 
-# Этап 2: Финальный образ
-FROM python:3.10-slim
+
+FROM python:3.10-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    DATABASE_URL="sqlite+aiosqlite:////app/data/dtp.db" \
+    LOG_LEVEL="INFO" \
+    DEBUG_MODE="false"
 
 WORKDIR /app
 
-# Копируем виртуальное окружение из этапа сборки
+RUN groupadd --system app \
+    && useradd --system --gid app --home-dir /app --shell /usr/sbin/nologin app \
+    && mkdir -p /app/data /app/logs \
+    && chown -R app:app /app
+
 COPY --from=builder /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+COPY --chown=app:app app ./app
+COPY --chown=app:app scripts ./scripts
+COPY --chown=app:app requirements.txt ./requirements.txt
 
-# Копируем код приложения
-COPY . .
+USER app
 
-# Создаем папку для логов и БД, если их нет
-RUN mkdir -p logs
-
-# Переменные окружения по умолчанию
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
-
-# Порт, который будет слушать FastAPI
 EXPOSE 8000
 
-# Запуск приложения через uvicorn
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()" || exit 1
+
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
