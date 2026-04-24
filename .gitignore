@@ -1,34 +1,34 @@
-# Python
+# Базы данных
+*.db
+*.sqlite3
+DTP_DB.db
+dtp.db
+
+# Виртуальное окружение
+venv/
+env/
+.env
+
+# Кэши и Python
 __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
-.venv/
-venv/
+.coverage
+htmlcov/
 
-# Environment
-.env
-
-# Database
-*.db
-*.sqlite3
-
-# Logs
+# Логи
 logs/
 *.log
 
-# IDE
-.vscode/
+# Внутренние файлы агентов и Maestro (для контекста)
+docs/maestro/
+.omp/
+.nanostack/
+CRITIQUE_FOR_DB_ENGINEER.md
+DB_BUG_REPORT.md
+
+# Системные файлы
+.DS_Store
 .idea/
-.obsidian/
-
-# Project specific
-/conductor
-
-.env
-*.db
-logs/
-__pycache__/
-.pytest_cache/
-dtp.db
-DTP_DB.db
+.vscode/
