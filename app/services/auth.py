@@ -1,5 +1,6 @@
 import secrets
 import hashlib
+from app.core.config import settings
 
 def generate_new_key() -> str:
     """
@@ -12,7 +13,8 @@ def hash_key(key: str) -> str:
     """
     Возвращает SHA-256 хеш ключа.
     """
-    return hashlib.sha256(key.encode()).hexdigest()
+    salted_key = f"{settings.AUTH_SALT}{key}"
+    return hashlib.sha256(salted_key.encode()).hexdigest()
 
 def get_key_prefix(key: str) -> str:
     """
@@ -24,4 +26,4 @@ def validate_key(key: str, hashed_key: str) -> bool:
     """
     Сравнивает хеш присланного ключа с хешем из БД.
     """
-    return hash_key(key) == hashed_key
+    return secrets.compare_digest(hash_key(key), hashed_key)

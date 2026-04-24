@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     
     # Security
     X_API_KEY: SecretStr
+    AUTH_SALT: str = "zebra-stat-default-salt-change-me-in-production"
     
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./dtp.db"

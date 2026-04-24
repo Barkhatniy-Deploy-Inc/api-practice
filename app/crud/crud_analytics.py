@@ -274,6 +274,24 @@ class CRUDAnalytics:
             "children": children_res.scalar() or 0
         }
 
+    async def get_clustered_hotspots(self, db: AsyncSession, region_code: Optional[str] = None) -> List[Any]:
+        """Получить кластеризованные координаты (округление до 3 знаков)"""
+        lat_rounded = func.round(Accident.coord_lat, 3).label("lat")
+        lon_rounded = func.round(Accident.coord_lon, 3).label("lon")
+        
+        stmt = select(
+            lat_rounded,
+            lon_rounded,
+            func.count(Accident.id).label("intensity")
+        ).where(Accident.coord_lat != 0, Accident.coord_lon != 0)
+        
+        if region_code:
+            stmt = stmt.where(Accident.region_code == region_code)
+            
+        stmt = stmt.group_by(lat_rounded, lon_rounded)
+        result = await db.execute(stmt)
+        return result.all()
+
     async def get_all_coordinates(self, db: AsyncSession, region_code: Optional[str] = None) -> List[Any]:
         """Получить все координаты для тепловой карты"""
         stmt = select(Accident.coord_lat, Accident.coord_lon)

@@ -121,128 +121,126 @@ def fetch_and_save(session, conn, region, year, month):
             pass
 
         records_count = len(dtp_cards)
+        with conn:
         
-        if records_count > 0:
-            for card in dtp_cards:
-                empt_number = card.get('empt_number')
-                if not empt_number: continue
+            if records_count > 0:
+                for card in dtp_cards:
+                    empt_number = card.get('empt_number')
+                    if not empt_number: continue
                 
-                date_dtp_raw = card.get('date_dtp', '')
-                if '.' in date_dtp_raw:
-                    d, m, y = date_dtp_raw.split('.')
-                    date_dtp = f"{y}-{m}-{d}"
-                else:
-                    date_dtp = f"{year}-{month:02d}-01"
+                    date_dtp_raw = card.get('date_dtp', '')
+                    if '.' in date_dtp_raw:
+                        d, m, y = date_dtp_raw.split('.')
+                        date_dtp = f"{y}-{m}-{d}"
+                    else:
+                        date_dtp = f"{year}-{month:02d}-01"
                 
-                lighting = card.get('osv') or 'Не указано'
-                road_type = card.get('k_dor') or card.get('dor_k') or 'Не указано'
+                    lighting = card.get('osv') or 'Не указано'
+                    road_type = card.get('k_dor') or card.get('dor_k') or 'Не указано'
                 
-                ndu_list = card.get('ndu', [])
-                has_road_defect = 1 if ndu_list else 0
-                road_defect_desc = ", ".join(ndu_list) if ndu_list else ""
+                    ndu_list = card.get('ndu', [])
+                    has_road_defect = 1 if ndu_list else 0
+                    road_defect_desc = ", ".join(ndu_list) if ndu_list else ""
 
-                pog_data = card.get('s_pog')
-                weather_name = pog_data[0] if isinstance(pog_data, list) and pog_data else 'Не указано'
-                weather_id = get_or_create_dict(cursor, 'weather_types', weather_name)
+                    pog_data = card.get('s_pog')
+                    weather_name = pog_data[0] if isinstance(pog_data, list) and pog_data else 'Не указано'
+                    weather_id = get_or_create_dict(cursor, 'weather_types', weather_name)
                 
-                pch_data = card.get('s_pch')
-                road_cond_name = pch_data[0] if isinstance(pch_data, list) and pch_data else 'Не указано'
-                road_cond_id = get_or_create_dict(cursor, 'road_conditions', road_cond_name)
+                    pch_data = card.get('s_pch')
+                    road_cond_name = pch_data[0] if isinstance(pch_data, list) and pch_data else 'Не указано'
+                    road_cond_id = get_or_create_dict(cursor, 'road_conditions', road_cond_name)
 
-                f_skr = str(card.get('f_skr', '')).lower()
-                driver_fled = 1 if 'да' in f_skr or f_skr == '1' else 0
+                    f_skr = str(card.get('f_skr', '')).lower()
+                    driver_fled = 1 if 'да' in f_skr or f_skr == '1' else 0
 
-                child_pog = int(card.get('k_d_pog', 0)) if str(card.get('k_d_pog')).isdigit() else 0
-                child_ran = int(card.get('k_d_ran', 0)) if str(card.get('k_d_ran')).isdigit() else 0
-                has_children = 1 if (child_pog + child_ran) > 0 else 0
+                    child_pog = int(card.get('k_d_pog', 0)) if str(card.get('k_d_pog')).isdigit() else 0
+                    child_ran = int(card.get('k_d_ran', 0)) if str(card.get('k_d_ran')).isdigit() else 0
+                    has_children = 1 if (child_pog + child_ran) > 0 else 0
 
-                np_alc = str(card.get('np_alc', '')).lower()
-                has_drunk = 1 if 'да' in np_alc or card.get('f_alc') == '1' else 0
+                    np_alc = str(card.get('np_alc', '')).lower()
+                    has_drunk = 1 if 'да' in np_alc or card.get('f_alc') == '1' else 0
                 
-                is_railway = 1 if 'жд' in str(card.get('f_zhd', '')).lower() else 0
+                    is_railway = 1 if 'жд' in str(card.get('f_zhd', '')).lower() else 0
 
-                accident_type_id = get_or_create_dict(cursor, 'accident_types', card.get('dtpv') or 'Не указано')
+                    accident_type_id = get_or_create_dict(cursor, 'accident_types', card.get('dtpv') or 'Не указано')
 
-                try:
-                    cursor.execute('''
-                        INSERT OR IGNORE INTO accidents (
-                            empt_number, accident_type_id, date_dtp, time_dtp,
-                            region_code, coord_lat, coord_lon, locality, road_name, road_km,
-                            is_city, road_category, weather_id, road_cond_id,
-                            lighting, has_road_defect, road_type, road_defect_desc,
-                            fatalities, injured, vehicles_count, participants_count, 
-                            has_children, driver_fled, has_drunk, is_railway
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        empt_number, accident_type_id, date_dtp, card.get('time', '00:00'),
-                        region, float(card.get('coord_w') or 0), float(card.get('coord_l') or 0),
-                        card.get('n_p', 'Не указано'), card.get('dor') or card.get('k_ul') or 'Не указана',
-                        int(card.get('km')) if str(card.get('km')).isdigit() else 0,
-                        1 if card.get('n_p') else 0, card.get('k_dor_zn', 'Не указано'),
-                        weather_id, road_cond_id, lighting, has_road_defect, road_type, road_defect_desc,
-                        card.get('pog', 0), card.get('ran', 0), card.get('k_ts', 1), card.get('k_uch', 1),
-                        has_children, driver_fled, has_drunk, is_railway
-                    ))
-                    
-                    cursor.execute('SELECT id FROM accidents WHERE empt_number = ?', (empt_number,))
-                    acc_row = cursor.fetchone()
-                    if not acc_row: continue
-                    accident_id = acc_row[0]
-                    
-                except sqlite3.Error as e:
-                    logging.error(f"Ошибка БД (ДТП {empt_number}): {e}")
-                    continue
-
-                ts_info = card.get('ts_info', [])
-                for ts in ts_info:
-                    c_brand_id = get_or_create_dict(cursor, 'car_brands', ts.get('marka_ts') or 'Не указан')
-                    c_model_id = get_or_create_car_model(cursor, ts.get('m_ts') or 'Не указана', c_brand_id)
-                    c_type_id = get_or_create_dict(cursor, 'car_types', ts.get('t_ts') or 'Не указан')
-
-                    cursor.execute('''
-                        INSERT INTO vehicles (accident_id, car_type_id, car_brand_id, car_model_id, year_release)
-                        VALUES (?, ?, ?, ?, ?)
-                    ''', (accident_id, c_type_id, c_brand_id, c_model_id, int(ts.get('g_v') or 0)))
-                    vehicle_id = cursor.lastrowid
-
-                    ts_uch = ts.get('ts_uch', [])
-                    for uch in ts_uch:
-                        raw_gender = str(uch.get('pol') or uch.get('POL') or '').strip().lower()
-                        if raw_gender.startswith('м'):
-                            gender = 'Мужской'
-                        elif raw_gender.startswith('ж'):
-                            gender = 'Женский'
-                        else:
-                            gender = 'Не указан'
-                        
-                        raw_age = str(uch.get('v_r') or uch.get('V_R') or '')
-                        age_digits = ''.join(filter(str.isdigit, raw_age))
-                        age = int(age_digits) if age_digits else None
-                        
-                        raw_exp = str(uch.get('v_st') or uch.get('V_ST') or '')
-                        exp_digits = ''.join(filter(str.isdigit, raw_exp))
-                        experience = int(exp_digits) if exp_digits else None
-                        
+                    try:
                         cursor.execute('''
-                            INSERT INTO participants (
-                                accident_id, vehicle_id, role, gender, age, experience, 
-                                is_drunk, is_culprit, health_status, first_aid
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            INSERT OR IGNORE INTO accidents (
+                                empt_number, accident_type_id, date_dtp, time_dtp,
+                                region_code, coord_lat, coord_lon, locality, road_name, road_km,
+                                is_city, road_category, weather_id, road_cond_id,
+                                lighting, has_road_defect, road_type, road_defect_desc,
+                                fatalities, injured, vehicles_count, participants_count, 
+                                has_children, driver_fled, has_drunk, is_railway
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', (
-                            accident_id, vehicle_id, uch.get('kt_uch', 'Неизвестно'), 
-                            gender, age, experience, 
-                            1 if 'опьянени' in str(uch.get('alco', '')).lower() else 0,
-                            1 if uch.get('NPDD') else 0, uch.get('S_P', 'Не указано'),
-                            1 if uch.get('MED_P') else 0
+                            empt_number, accident_type_id, date_dtp, card.get('time', '00:00'),
+                            region, float(card.get('coord_w') or 0), float(card.get('coord_l') or 0),
+                            card.get('n_p', 'Не указано'), card.get('dor') or card.get('k_ul') or 'Не указана',
+                            int(card.get('km')) if str(card.get('km')).isdigit() else 0,
+                            1 if card.get('n_p') else 0, card.get('k_dor_zn', 'Не указано'),
+                            weather_id, road_cond_id, lighting, has_road_defect, road_type, road_defect_desc,
+                            card.get('pog', 0), card.get('ran', 0), card.get('k_ts', 1), card.get('k_uch', 1),
+                            has_children, driver_fled, has_drunk, is_railway
                         ))
+                    
+                        cursor.execute('SELECT id FROM accidents WHERE empt_number = ?', (empt_number,))
+                        acc_row = cursor.fetchone()
+                        if not acc_row: continue
+                        accident_id = acc_row[0]
+                    
+                    except sqlite3.Error as e:
+                        logging.error(f"Ошибка БД (ДТП {empt_number}): {e}")
+                        continue
 
-            conn.commit()
-            cursor.execute('INSERT OR REPLACE INTO sync_history (region_code, year, month, records_downloaded) VALUES (?, ?, ?, ?)', (region, year, month, records_count))
-            conn.commit()
-            logging.info(f"✅ Синхронизация: {region} за {month}/{year} — OK.")
-        else:
-            cursor.execute('INSERT OR REPLACE INTO sync_history (region_code, year, month, records_downloaded) VALUES (?, ?, ?, ?)', (region, year, month, 0))
-            conn.commit()
+                    ts_info = card.get('ts_info', [])
+                    for ts in ts_info:
+                        c_brand_id = get_or_create_dict(cursor, 'car_brands', ts.get('marka_ts') or 'Не указан')
+                        c_model_id = get_or_create_car_model(cursor, ts.get('m_ts') or 'Не указана', c_brand_id)
+                        c_type_id = get_or_create_dict(cursor, 'car_types', ts.get('t_ts') or 'Не указан')
+
+                        cursor.execute('''
+                            INSERT INTO vehicles (accident_id, car_type_id, car_brand_id, car_model_id, year_release)
+                            VALUES (?, ?, ?, ?, ?)
+                        ''', (accident_id, c_type_id, c_brand_id, c_model_id, int(ts.get('g_v') or 0)))
+                        vehicle_id = cursor.lastrowid
+
+                        ts_uch = ts.get('ts_uch', [])
+                        for uch in ts_uch:
+                            raw_gender = str(uch.get('pol') or uch.get('POL') or '').strip().lower()
+                            if raw_gender.startswith('м'):
+                                gender = 'Мужской'
+                            elif raw_gender.startswith('ж'):
+                                gender = 'Женский'
+                            else:
+                                gender = 'Не указан'
+                        
+                            raw_age = str(uch.get('v_r') or uch.get('V_R') or '')
+                            age_digits = ''.join(filter(str.isdigit, raw_age))
+                            age = int(age_digits) if age_digits else None
+                        
+                            raw_exp = str(uch.get('v_st') or uch.get('V_ST') or '')
+                            exp_digits = ''.join(filter(str.isdigit, raw_exp))
+                            experience = int(exp_digits) if exp_digits else None
+                        
+                            cursor.execute('''
+                                INSERT INTO participants (
+                                    accident_id, vehicle_id, role, gender, age, experience, 
+                                    is_drunk, is_culprit, health_status, first_aid
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ''', (
+                                accident_id, vehicle_id, uch.get('kt_uch', 'Неизвестно'), 
+                                gender, age, experience, 
+                                1 if 'опьянени' in str(uch.get('alco', '')).lower() else 0,
+                                1 if uch.get('NPDD') else 0, uch.get('S_P', 'Не указано'),
+                                1 if uch.get('MED_P') else 0
+                            ))
+
+                cursor.execute('INSERT OR REPLACE INTO sync_history (region_code, year, month, records_downloaded) VALUES (?, ?, ?, ?)', (region, year, month, records_count))
+                logging.info(f"✅ Синхронизация: {region} за {month}/{year} — OK.")
+            else:
+                cursor.execute('INSERT OR REPLACE INTO sync_history (region_code, year, month, records_downloaded) VALUES (?, ?, ?, ?)', (region, year, month, 0))
 
         time.sleep(random.uniform(0.3, 0.6))
 
@@ -255,6 +253,7 @@ def main():
         return
 
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA foreign_keys = ON;")
     
     # --- МАГИЯ САМОЛЕЧЕНИЯ ---

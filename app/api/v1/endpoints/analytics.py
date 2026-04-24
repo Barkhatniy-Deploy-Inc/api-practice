@@ -244,9 +244,8 @@ async def get_lighting_correlation(region_code: Optional[str] = Query(None), db:
 @router.get("/reports/hotspots-map", response_model=HotspotsResponse, summary="Тепловая карта")
 async def get_hotspots(region_code: Optional[str] = Query(None), db: AsyncSession = Depends(get_db)):
     """Кластеризованные координаты ДТП для карт"""
-    coords = await crud_analytics.get_all_coordinates(db, region_code)
-    points = analytics_service.cluster_coordinates(coords)
-    return HotspotsResponse(points=[HotspotPoint(**p) for p in points])
+    hotspots = await crud_analytics.get_clustered_hotspots(db, region_code)
+    return HotspotsResponse(points=[HotspotPoint(lat=h.lat, lon=h.lon, intensity=h.intensity) for h in hotspots])
 
 @router.get("/reports/participant-profile", response_model=ParticipantProfileResponse, summary="Портрет виновника")
 async def get_participant_profile(db: AsyncSession = Depends(get_db)):
