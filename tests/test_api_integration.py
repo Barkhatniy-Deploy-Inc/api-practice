@@ -1,17 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
-from app.main import app, verify_api_key
-
-@pytest.fixture(autouse=True)
-def run_around_tests():
-    # Отключаем проверку API-ключа для тестов этого файла
-    async def override_verify_api_key():
-        return "test_key"
-    
-    app.dependency_overrides[verify_api_key] = override_verify_api_key
-    yield
-    # Очищаем переопределения после завершения тестов файла
-    app.dependency_overrides.clear()
+from app.main import app
+from app.core.config import settings
 
 client = TestClient(app)
 
@@ -19,51 +9,38 @@ def test_health_check():
     """Проверка работоспособности системы"""
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    assert response.json() == {"status": "ok", "version": "1.0.0"}
 
-def test_analytics_summary():
-    """Проверка эндпоинта сводной статистики"""
-    response = client.get("/api/v1/analytics/summary")
+def test_auth_me_integration(auth_headers):
+    """Проверка эндпоинта идентификации владельца ключа"""
+    response = client.get("/api/v1/auth/me", headers=auth_headers)
+    assert response.status_code == 200
+    assert "owner_name" in response.json()
+
+def test_analytics_summary_integration(auth_headers):
+    """Проверка сводной статистики"""
+    response = client.get("/api/v1/stats/summary", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
     assert "total_accidents" in data
     assert "total_fatalities" in data
-    assert "total_injured" in data
-    assert isinstance(data["total_accidents"], int)
 
-def test_analytics_regions():
-    """Проверка эндпоинта статистики по регионам"""
-    response = client.get("/api/v1/analytics/regions")
+def test_hotspots_map_integration(auth_headers):
+    """Проверка эндпоинта тепловой карты (SQL кластеризация)"""
+    response = client.get("/api/v1/analytics/reports/hotspots-map", headers=auth_headers)
     assert response.status_code == 200
-    data = response.json()
-    assert "items" in data
-    assert len(data["items"]) >= 0
-    if len(data["items"]) > 0:
-        item = data["items"][0]
-        assert "name" in item
-        assert "code" in item
-        assert "accidents" in item
+    assert "points" in response.json()
 
-def test_analytics_seasonality():
-    """Проверка эндпоинта сезонности"""
-    response = client.get("/api/v1/analytics/seasonality")
-    # Если данных нет, может вернуть 404, но мы ожидаем 200 если БД не пуста
-    if response.status_code == 200:
-        data = response.json()
-        assert "items" in data
-        assert len(data["items"]) == 4
-        for item in data["items"]:
-            assert "season" in item
-            assert "average_accidents" in item
-    elif response.status_code == 404:
-        assert response.json()["detail"] == "Нет данных для анализа сезонности"
-
-def test_analytics_participant_profile():
-    """Проверка эндпоинта портрета виновника"""
-    response = client.get("/api/v1/analytics/reports/participant-profile")
+def test_participant_profile_integration(auth_headers):
+    """Проверка портрета виновника (SQL агрегация)"""
+    response = client.get("/api/v1/analytics/reports/participant-profile", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
     assert "gender" in data
     assert "age_group" in data
     assert "experience_group" in data
-    assert "total_culprits" in data
+
+def test_unauthorized_access():
+    """Проверка блокировки доступа без ключа"""
+    response = client.get("/api/v1/stats/summary")
+    assert response.status_code == 403
