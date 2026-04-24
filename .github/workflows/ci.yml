@@ -33,6 +33,7 @@ jobs:
       - name: Run tests with coverage
         env:
           X_API_KEY: "test_key_for_ci_checks_only_must_be_long_enough"
+          AUTH_SALT: "test_auth_salt_for_ci_checks_only_123456"
         run: |
           pytest --cov=app tests/
 
@@ -58,21 +59,29 @@ jobs:
       - name: Validate production secrets
         env:
           X_API_KEY: ${{ secrets.X_API_KEY }}
+          AUTH_SALT: ${{ secrets.AUTH_SALT }}
         run: |
           if [ -z "$X_API_KEY" ]; then
             echo "X_API_KEY secret is not set for the production environment."
             exit 1
           fi
 
+          if [ -z "$AUTH_SALT" ]; then
+            echo "AUTH_SALT secret is not set for the production environment."
+            exit 1
+          fi
+
       - name: Create production env file
         env:
           X_API_KEY: ${{ secrets.X_API_KEY }}
+          AUTH_SALT: ${{ secrets.AUTH_SALT }}
           LOG_LEVEL: ${{ secrets.LOG_LEVEL }}
           DEBUG_MODE: ${{ secrets.DEBUG_MODE }}
         run: |
           umask 077
           {
             printf 'X_API_KEY=%s\n' "$X_API_KEY"
+            printf 'AUTH_SALT=%s\n' "$AUTH_SALT"
             printf 'LOG_LEVEL=%s\n' "${LOG_LEVEL:-INFO}"
             printf 'DEBUG_MODE=%s\n' "${DEBUG_MODE:-false}"
           } > .env
