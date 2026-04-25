@@ -141,7 +141,7 @@ jobs:
           docker compose -p zebrastat ps
           docker compose -p zebrastat logs --tail 200
 
-      - name: Remove generated env file
-        if: always()
-        run: |
-          rm -f .env
+      # - name: Remove generated env file
+      #   if: always()
+      #   run: |
+      #     rm -f .env
