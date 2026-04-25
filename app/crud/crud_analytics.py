@@ -166,4 +166,18 @@ class CRUDAnalytics:
         result = await db.execute(stmt)
         return result.all()
 
+    async def get_weather_correlation(self, db: AsyncSession, region_code: Optional[str] = None) -> Any:
+        """Анализ влияния погоды на тяжесть ДТП"""
+        stmt = select(
+            Accident.weather,
+            func.count(Accident.id).label("total_accidents"),
+            func.avg(Accident.fatalities).label("avg_fatalities")
+        )
+        if region_code:
+            stmt = stmt.where(Accident.region_code == region_code)
+        
+        stmt = stmt.group_by(Accident.weather).order_by(desc("total_accidents"))
+        result = await db.execute(stmt)
+        return result.all()
+
 crud_analytics = CRUDAnalytics()
