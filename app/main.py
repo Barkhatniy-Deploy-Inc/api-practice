@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request, HTTPException, Security, status, Depends
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+from fastapi.staticfiles import StaticFiles
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,10 +43,35 @@ app = FastAPI(
     description=settings.PROJECT_DESCRIPTION,
     version=settings.VERSION,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=None,
+    redoc_url=None,
     openapi_tags=tags_metadata,
 )
+
+# Подключение статических файлов
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    """Кастомный Swagger UI с локальной статикой"""
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=app.title + " - Swagger UI",
+        oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
+        swagger_js_url="/static/swagger/swagger-ui-bundle.js",
+        swagger_css_url="/static/swagger/swagger-ui.css",
+        swagger_favicon_url="/static/favicon.png",
+    )
+
+@app.get("/redoc", include_in_schema=False)
+async def redoc_html():
+    """Кастомный ReDoc с локальной статикой"""
+    return get_redoc_html(
+        openapi_url=app.openapi_url,
+        title=app.title + " - ReDoc",
+        redoc_js_url="/static/redoc/redoc.standalone.js",
+        redoc_favicon_url="/static/favicon.png",
+    )
 
 # Локализация ошибок валидации Pydantic
 @app.exception_handler(RequestValidationError)
@@ -151,6 +178,16 @@ async def add_process_time_header(request: Request, call_next):
 @app.get("/health", tags=["System"])
 async def health_check():
     return {"status": "ok", "version": settings.VERSION}
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt():
+    """Отдача robots.txt для поисковых систем"""
+    import os
+    from fastapi.responses import FileResponse
+    robots_path = os.path.join(os.getcwd(), "robots.txt")
+    if os.path.exists(robots_path):
+        return FileResponse(robots_path)
+    return HTMLResponse(content="User-agent: *\nDisallow: /api/", media_type="text/plain")
 
 @app.get("/", tags=["System"])
 async def root():

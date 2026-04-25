@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Allow: /docs
+Allow: /redoc
+Disallow: /api/
+Disallow: /health
+Disallow: /openapi.json
+
+Sitemap: http://10.128.0.22:8000/sitemap.xml
