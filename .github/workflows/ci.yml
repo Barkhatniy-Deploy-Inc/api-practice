@@ -115,18 +115,26 @@ jobs:
         run: |
           docker compose -p zebrastat exec -T api python -m scripts.init_db
 
-      - name: Wait for API health after database init
+      - name: Seed database dictionaries
+        run: |
+          docker compose -p zebrastat exec -T api python -m scripts.seed_db
+
+      - name: Verify seeded dictionaries
+        run: |
+          docker compose -p zebrastat exec -T api python -c "import sqlite3; from scripts.seed_db import resolve_db_path; db_path = resolve_db_path(); conn = sqlite3.connect(db_path); cursor = conn.cursor(); cursor.execute('SELECT COUNT(*) FROM districts'); districts_count = cursor.fetchone()[0]; cursor.execute('SELECT COUNT(*) FROM regions'); regions_count = cursor.fetchone()[0]; conn.close(); print(f'districts={districts_count}, regions={regions_count}'); assert districts_count > 0 and regions_count > 0, 'Seed verification failed: dictionaries are empty.'"
+
+      - name: Wait for API health after database setup
         run: |
           for attempt in $(seq 1 20); do
             if docker compose -p zebrastat exec -T api python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()" >/dev/null 2>&1; then
               exit 0
             fi
 
-            echo "Waiting for API health after init (${attempt}/20)..."
+            echo "Waiting for API health after database setup (${attempt}/20)..."
             sleep 3
           done
 
-          echo "API health endpoint did not recover after database initialization."
+          echo "API health endpoint did not recover after database setup."
           docker compose -p zebrastat ps
           docker compose -p zebrastat logs --tail 200 api
           exit 1
