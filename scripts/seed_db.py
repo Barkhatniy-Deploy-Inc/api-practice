@@ -54,6 +54,10 @@ def seed():
             if not code or not name:
                 continue
 
+            # В справочнике ГИБДД есть агрегированная строка по всей РФ, это не отдельный регион.
+            if code == "1100":
+                continue
+
             district_id = REGION_TO_DISTRICT.get(code)
             if not district_id:
                 print(f"Пропускаю регион без district mapping: {code} {name}")
