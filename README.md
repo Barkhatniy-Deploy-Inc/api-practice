@@ -24,7 +24,7 @@ docker compose up --build
 
 - `pull_request` в `main` или `master`: запускается только `test` job.
 - `push` в `main`: после успешных тестов запускается `deploy` job на self-hosted runner с labels `self-hosted`, `linux`, `x64`, `yandex-vds`, `production`.
-- Деплой использует `docker compose -p zebrastat up -d --build --remove-orphans`, затем выполняет `python -m scripts.init_db` внутри контейнера и проверяет `http://127.0.0.1:8000/health`.
+- Деплой использует `docker compose -p zebrastat up -d --build --remove-orphans`, затем выполняет `python -m scripts.init_db` и `python -m scripts.seed_db` внутри контейнера, проверяет наполнение справочников и подтверждает доступность `http://127.0.0.1:8000/health`.
 
 Для GitHub нужно создать environment `production` и заполнить secrets:
 

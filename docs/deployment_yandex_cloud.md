@@ -118,9 +118,11 @@ Workflow на self-hosted runner:
 2. Собирает `.env` из GitHub Environment Secrets.
 3. Выполняет `docker compose -p zebrastat up -d --build --remove-orphans`.
 4. Выполняет `docker compose -p zebrastat exec -T api python -m scripts.init_db`.
-5. Проверяет `http://127.0.0.1:8000/health`.
+5. Выполняет `docker compose -p zebrastat exec -T api python -m scripts.seed_db`.
+6. Проверяет, что таблицы `districts` и `regions` не пустые.
+7. Проверяет `http://127.0.0.1:8000/health`.
 
-Если понадобится первичное наполнение справочников после деплоя, используйте отдельную команду:
+Для ручного повторного наполнения справочников после деплоя используйте команду:
 
 ```bash
 docker compose -p zebrastat exec -T api python -m scripts.seed_db
