@@ -20,7 +20,7 @@ docker compose up --build
 
 ## CI/CD и production deployment
 
-Тесты продолжают выполняться на GitHub-hosted runner (`ubuntu-latest`), а production-деплой вынесен на self-hosted runner в Yandex Cloud VDS `213.165.196.208`.
+Тесты продолжают выполняться на GitHub-hosted runner (`ubuntu-latest`), а production-деплой вынесен на self-hosted runner в Yandex Cloud VDS `213.165.196.109`.
 
 - `pull_request` в `main` или `master`: запускается только `test` job.
 - `push` в `main`: после успешных тестов запускается `deploy` job на self-hosted runner с labels `self-hosted`, `linux`, `x64`, `yandex-vds`, `production`.

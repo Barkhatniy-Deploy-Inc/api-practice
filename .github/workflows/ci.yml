@@ -51,7 +51,7 @@ jobs:
       cancel-in-progress: false
     environment:
       name: production
-      url: http://213.165.196.208:8000
+      url: http://213.165.196.109:8000
 
     steps:
       - uses: actions/checkout@v4
